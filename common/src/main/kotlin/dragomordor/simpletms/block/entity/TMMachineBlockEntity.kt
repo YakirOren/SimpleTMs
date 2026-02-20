@@ -222,6 +222,109 @@ class TMMachineBlockEntity(
     }
 
     // ========================================
+    // Container Interface Implementation
+    // ========================================
+
+    override fun getContainerSize(): Int {
+        val moves = getSortedMoves()
+        return if (moves.isEmpty()) 1 else 1 + moves.size * 2
+    }
+
+    override fun isEmpty(): Boolean = storedMoves.values.all { it.isEmpty() }
+
+    override fun getItem(slot: Int): ItemStack {
+        if (slot == 0) return ItemStack.EMPTY
+        return buildItemStackForSlot(slot)
+    }
+
+    override fun removeItem(slot: Int, amount: Int): ItemStack {
+        if (slot == 0) return ItemStack.EMPTY
+        val moveName = slotToMoveName(slot) ?: return ItemStack.EMPTY
+        val isTR = slotIsTR(slot)
+        val currentCount = getMoveQuantity(moveName, isTR)
+        if (currentCount <= 0) return ItemStack.EMPTY
+
+        val toRemove = amount.coerceAtMost(currentCount)
+        removeMove(moveName, isTR, toRemove)
+
+        val prefix = if (isTR) "tr_" else "tm_"
+        val stack = SimpleTMsItems.getItemStackFromName("$prefix$moveName")
+        stack.count = toRemove
+        return stack
+    }
+
+    override fun removeItemNoUpdate(slot: Int): ItemStack {
+        if (slot == 0) return ItemStack.EMPTY
+        val moveName = slotToMoveName(slot) ?: return ItemStack.EMPTY
+        val isTR = slotIsTR(slot)
+        val currentCount = getMoveQuantity(moveName, isTR)
+        if (currentCount <= 0) return ItemStack.EMPTY
+
+        // Remove all without triggering sync (caller handles updates)
+        val data = storedMoves[moveName] ?: return ItemStack.EMPTY
+        if (isTR) {
+            data.trCount = 0
+        } else {
+            data.tmCount = 0
+        }
+        if (data.isEmpty()) {
+            storedMoves.remove(moveName)
+        }
+
+        val prefix = if (isTR) "tr_" else "tm_"
+        val stack = SimpleTMsItems.getItemStackFromName("$prefix$moveName")
+        stack.count = currentCount
+        return stack
+    }
+
+    override fun setItem(slot: Int, stack: ItemStack) {
+        if (slot == 0) {
+            // Input slot: route through tryInsert
+            if (!stack.isEmpty) {
+                tryInsert(stack)
+            }
+            return
+        }
+        // Output slots: validate and set directly
+        val moveName = slotToMoveName(slot) ?: return
+        val isTR = slotIsTR(slot)
+        val item = stack.item
+        if (stack.isEmpty) {
+            // Clear this slot
+            val data = storedMoves[moveName] ?: return
+            if (isTR) data.trCount = 0 else data.tmCount = 0
+            if (data.isEmpty()) storedMoves.remove(moveName)
+            setChanged()
+            syncToClients()
+            return
+        }
+        if (item !is MoveLearnItem) return
+        if (item.moveName != moveName || item.isTR != isTR) return
+        // Set the count directly
+        val data = storedMoves.getOrPut(moveName) { StoredMoveData() }
+        val max = if (isTR) maxTRStackSize else 1
+        val newCount = stack.count.coerceAtMost(max)
+        if (isTR) data.trCount = newCount else data.tmCount = newCount
+        setChanged()
+        syncToClients()
+    }
+
+    override fun canPlaceItem(slot: Int, stack: ItemStack): Boolean {
+        if (slot != 0) return false
+        val item = stack.item
+        if (item !is MoveLearnItem) return false
+        return canAddMore(item.moveName, item.isTR)
+    }
+
+    override fun stillValid(player: Player): Boolean = true
+
+    override fun clearContent() {
+        storedMoves.clear()
+        setChanged()
+        syncToClients()
+    }
+
+    // ========================================
     // Item Handling
     // ========================================
 
