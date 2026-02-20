@@ -2,6 +2,7 @@ package dragomordor.simpletms.neoforge
 
 import dragomordor.simpletms.SimpleTMs.MOD_ID
 import dragomordor.simpletms.SimpleTMs
+import dragomordor.simpletms.block.entity.SimpleTMsBlockEntities
 import dragomordor.simpletms.item.group.SimpleTMsItemGroups
 import dragomordor.simpletms.loot.LootInjector
 import dragomordor.simpletms.network.SimpleTMsNetwork
@@ -10,8 +11,11 @@ import net.minecraft.world.item.CreativeModeTab
 import net.neoforged.api.distmarker.Dist
 import net.neoforged.fml.common.Mod
 import net.neoforged.fml.loading.FMLEnvironment
+import net.neoforged.neoforge.capabilities.Capabilities
+import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent
 import net.neoforged.neoforge.common.NeoForge
 import net.neoforged.neoforge.event.LootTableLoadEvent
+import net.neoforged.neoforge.items.wrapper.InvWrapper
 import net.neoforged.neoforge.registries.RegisterEvent
 import thedarkcolour.kotlinforforge.neoforge.forge.MOD_BUS
 
@@ -22,6 +26,7 @@ object SimpleTMs {
         SimpleTMs.preinit()
         SimpleTMs.init()
         with(MOD_BUS) {
+            addListener(::registerCapabilities)
         }
         with(NeoForge.EVENT_BUS) {
             addListener(::onLootTableLoad)
@@ -42,6 +47,13 @@ object SimpleTMs {
     // ------------------------------------------------------------
     // Event Handlers
     // ------------------------------------------------------------
+
+    private fun registerCapabilities(event: RegisterCapabilitiesEvent) {
+        event.registerBlockEntity(
+            Capabilities.ItemHandler.BLOCK,
+            SimpleTMsBlockEntities.TM_MACHINE.get()
+        ) { be, _ -> InvWrapper(be) }
+    }
 
     private fun onLootTableLoad(e: LootTableLoadEvent) {
         LootInjector.attemptInjection(e.name) { builder -> e.table.addPool(builder.build()) }

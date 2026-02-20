@@ -225,6 +225,8 @@ class TMMachineBlockEntity(
     // Container Interface Implementation
     // ========================================
 
+    override fun getMaxStackSize(): Int = 1
+
     override fun getContainerSize(): Int {
         val moves = getSortedMoves()
         return if (moves.isEmpty()) 1 else 1 + moves.size * 2
