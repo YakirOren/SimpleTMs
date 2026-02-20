@@ -1,6 +1,7 @@
 package dragomordor.simpletms.block.entity
 
 import dragomordor.simpletms.SimpleTMs
+import dragomordor.simpletms.api.MoveCaseHelper
 import dragomordor.simpletms.item.custom.MoveLearnItem
 import dragomordor.simpletms.network.SimpleTMsNetwork
 import dragomordor.simpletms.ui.PokemonFilterData
@@ -16,6 +17,7 @@ import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ClientGamePacketListener
 import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.Container
 import net.minecraft.world.Containers
 import net.minecraft.world.MenuProvider
 import net.minecraft.world.entity.player.Inventory
@@ -40,7 +42,7 @@ import dragomordor.simpletms.SimpleTMsItems
 class TMMachineBlockEntity(
     pos: BlockPos,
     state: BlockState
-) : BlockEntity(SimpleTMsBlockEntities.TM_MACHINE.get(), pos, state) {
+) : BlockEntity(SimpleTMsBlockEntities.TM_MACHINE.get(), pos, state), Container {
 
     // Storage: move name -> StoredMoveData (tmCount, trCount)
     private val storedMoves: MutableMap<String, StoredMoveData> = mutableMapOf()
@@ -170,6 +172,54 @@ class TMMachineBlockEntity(
      * Get total items stored (for display)
      */
     fun getTotalItemCount(): Int = storedMoves.values.sumOf { it.tmCount + it.trCount }
+
+    // ========================================
+    // Container Slot Mapping
+    // ========================================
+
+    /**
+     * Get the sorted move names list for slot mapping.
+     * Uses MoveCaseHelper's cached sorted list.
+     * Slot layout:
+     *   Slot 0 = input slot (accepts any valid TM/TR)
+     *   Slot 1 = TM for sortedMoves[0]
+     *   Slot 2 = TR for sortedMoves[0]
+     *   Slot 3 = TM for sortedMoves[1]
+     *   Slot 4 = TR for sortedMoves[1]
+     *   ...
+     */
+    private fun getSortedMoves(): List<String> = MoveCaseHelper.getSortedTMMoveNames()
+
+    /**
+     * Convert a container slot index (1+) to a move name.
+     * Returns null for slot 0 (input) or out-of-range slots.
+     */
+    private fun slotToMoveName(slot: Int): String? {
+        if (slot <= 0) return null
+        val moveIndex = (slot - 1) / 2
+        val moves = getSortedMoves()
+        return if (moveIndex in moves.indices) moves[moveIndex] else null
+    }
+
+    /**
+     * Check if a slot (1+) maps to a TR (even slots) or TM (odd slots).
+     */
+    private fun slotIsTR(slot: Int): Boolean = slot > 0 && slot % 2 == 0
+
+    /**
+     * Build an ItemStack for the given slot from abstract storage.
+     * Returns EMPTY if nothing is stored at that slot.
+     */
+    private fun buildItemStackForSlot(slot: Int): ItemStack {
+        val moveName = slotToMoveName(slot) ?: return ItemStack.EMPTY
+        val isTR = slotIsTR(slot)
+        val count = getMoveQuantity(moveName, isTR)
+        if (count <= 0) return ItemStack.EMPTY
+        val prefix = if (isTR) "tr_" else "tm_"
+        val stack = SimpleTMsItems.getItemStackFromName("$prefix$moveName")
+        stack.count = count
+        return stack
+    }
 
     // ========================================
     // Item Handling
